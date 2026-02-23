@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scanner de Mercado</title>
+<title>Scanner</title>
 
 <style>
 body{
@@ -18,7 +18,7 @@ color:white;
 
 header{
 width:100%;
-padding:15px;
+padding:14px;
 text-align:center;
 background:#020617;
 font-weight:bold;
@@ -27,7 +27,7 @@ font-weight:bold;
 #scanner{
 margin-top:20px;
 width:92%;
-max-width:340px;
+max-width:360px;
 background:#020617;
 border-radius:18px;
 padding:15px;
@@ -62,12 +62,6 @@ animation:scan 2s linear infinite;
 100%{top:100%}
 }
 
-#status{
-margin-top:10px;
-font-size:14px;
-text-align:center;
-}
-
 button{
 width:100%;
 margin-top:15px;
@@ -81,6 +75,12 @@ cursor:pointer;
 
 .ligado{background:#22c55e;}
 .desligado{background:#ef4444;}
+
+#status{
+margin-top:10px;
+text-align:center;
+font-size:14px;
+}
 </style>
 </head>
 
@@ -104,28 +104,26 @@ cursor:pointer;
 <canvas id="canvas" style="display:none;"></canvas>
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const toggleBtn = document.getElementById("toggleBtn");
-const statusText = document.getElementById("status");
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const statusText=document.getElementById("status");
+const toggleBtn=document.getElementById("toggleBtn");
 
-let scannerLigado = true;
-let tocandoSom = false;
+let scannerLigado=true;
+let tocando=false;
 let audioCtx;
 
-// botão liga/desliga
-toggleBtn.onclick = () => {
-scannerLigado = !scannerLigado;
+// botão
+toggleBtn.onclick=()=>{
+scannerLigado=!scannerLigado;
 
 if(scannerLigado){
 toggleBtn.className="ligado";
 toggleBtn.textContent="Scanner Ligado";
-statusText.textContent="Procurando código...";
 }else{
 toggleBtn.className="desligado";
 toggleBtn.textContent="Scanner Desligado";
-statusText.textContent="Scanner pausado";
 }
 };
 
@@ -138,36 +136,34 @@ audioCtx=new(window.AudioContext||window.webkitAudioContext)();
 const osc=audioCtx.createOscillator();
 const gain=audioCtx.createGain();
 
-osc.frequency.value=1200;
-osc.type="sine";
-
+osc.frequency.value=1150;
 osc.connect(gain);
 gain.connect(audioCtx.destination);
 
 osc.start();
-tocandoSom=true;
+tocando=true;
 
-statusText.textContent="Código detectado!";
+statusText.textContent="Código detectado";
 
 if(navigator.vibrate) navigator.vibrate(200);
 
 setTimeout(()=>{
 osc.stop();
-tocandoSom=false;
+tocando=false;
 statusText.textContent="Procurando código...";
 },1500);
 }
 
-// abrir câmera
+// câmera
 navigator.mediaDevices.getUserMedia({
 video:{facingMode:"environment"}
 }).then(stream=>{
 video.srcObject=stream;
 });
 
-// DETECÇÃO MELHORADA
-function detectarCodigo(){
-if(!scannerLigado||tocandoSom) return;
+// DETECÇÃO TREINADA DE BARRAS
+function detectar(){
+if(!scannerLigado||tocando) return;
 
 canvas.width=video.videoWidth;
 canvas.height=video.videoHeight;
@@ -177,52 +173,47 @@ ctx.drawImage(video,0,0);
 const w=canvas.width;
 const h=canvas.height;
 
-// área central
-const startX=Math.floor(w*0.25);
-const endX=Math.floor(w*0.75);
-const startY=Math.floor(h*0.35);
-const endY=Math.floor(h*0.65);
+// faixa central
+const y=Math.floor(h*0.5);
 
-const frame=ctx.getImageData(startX,startY,endX-startX,endY-startY);
-const data=frame.data;
-const largura=endX-startX;
-const altura=endY-startY;
+let linha=[];
 
-// converter para brilho
-let colunas=[];
-
-for(let x=0;x<largura;x+=4){
-let escuro=0;
-
-for(let y=0;y<altura;y+=4){
-const i=(y*largura+x)*4;
-const brilho=data[i]+data[i+1]+data[i+2];
-
-if(brilho<180) escuro++;
+// coleta brilho da linha
+for(let x=0;x<w;x+=2){
+const pixel=ctx.getImageData(x,y,1,1).data;
+const brilho=pixel[0]+pixel[1]+pixel[2];
+linha.push(brilho);
 }
 
-colunas.push(escuro>altura*0.25?1:0);
+// suavização (tipo modelo treinado)
+let suavizado=[];
+for(let i=2;i<linha.length-2;i++){
+let media=(linha[i-2]+linha[i-1]+linha[i]+linha[i+1]+linha[i+2])/5;
+suavizado.push(media);
 }
 
-// procurar padrão |||| (barras próximas)
-let seq=0;
-let maxSeq=0;
+// detectar transições claro/escuro
+let transicoes=0;
+let sequencia=0;
 
-for(let i=0;i<colunas.length;i++){
-if(colunas[i]){
-seq++;
-if(seq>maxSeq) maxSeq=seq;
-}else{
-seq=0;
-}
-}
+for(let i=1;i<suavizado.length;i++){
+let diff=Math.abs(suavizado[i]-suavizado[i-1]);
 
-if(maxSeq>=4){
+if(diff>60){ // mudança forte = barra
+sequencia++;
+transicoes++;
+
+if(sequencia>=4){
 beep();
+return;
+}
+}else{
+if(sequencia>0) sequencia--;
+}
 }
 }
 
-setInterval(detectarCodigo,200);
+setInterval(detectar,120);
 </script>
 
 </body>
