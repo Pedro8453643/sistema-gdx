@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scanner de Círculo</title>
+<title>Scanner Inteligente</title>
 
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <style>
 body{
 margin:0;
-background:linear-gradient(180deg,#0f172a,#020617);
 font-family:system-ui;
+background:linear-gradient(180deg,#020617,#0f172a);
 display:flex;
 flex-direction:column;
 align-items:center;
@@ -21,12 +21,10 @@ min-height:100vh;
 
 header{
 width:100%;
-padding:18px;
 text-align:center;
-font-size:18px;
+padding:18px;
 font-weight:600;
 background:#020617;
-border-bottom:1px solid rgba(255,255,255,0.05);
 }
 
 #scanner{
@@ -34,9 +32,9 @@ margin-top:25px;
 width:92%;
 max-width:380px;
 background:#020617;
-border-radius:22px;
+border-radius:20px;
 padding:16px;
-box-shadow:0 20px 50px rgba(0,0,0,0.6);
+box-shadow:0 20px 40px rgba(0,0,0,0.6);
 }
 
 #cameraBox{
@@ -57,8 +55,8 @@ object-fit:cover;
 position:absolute;
 width:100%;
 height:3px;
-background:#ff2d2d;
-box-shadow:0 0 12px red;
+background:red;
+box-shadow:0 0 10px red;
 animation:scan 2s linear infinite;
 }
 
@@ -71,28 +69,22 @@ animation:scan 2s linear infinite;
 margin-top:12px;
 text-align:center;
 font-size:14px;
-opacity:0.85;
+opacity:0.8;
 }
 
 button{
 width:100%;
-margin-top:16px;
+margin-top:15px;
 padding:14px;
 border:none;
 border-radius:14px;
 font-size:16px;
 font-weight:600;
 cursor:pointer;
-transition:0.2s;
 }
 
-.ligado{
-background:#22c55e;
-}
-
-.desligado{
-background:#ef4444;
-}
+.ligado{background:#22c55e;}
+.desligado{background:#ef4444;}
 
 footer{
 margin-top:auto;
@@ -105,7 +97,7 @@ opacity:0.6;
 
 <body>
 
-<header>Scanner Inteligente</header>
+<header>Scanner de Triângulo</header>
 
 <div id="scanner">
 
@@ -114,7 +106,7 @@ opacity:0.6;
 <div id="laser"></div>
 </div>
 
-<div id="status">Mostre um círculo em papel branco</div>
+<div id="status">Mostre um triângulo em papel branco</div>
 
 <button id="toggleBtn" class="ligado">Scanner Ligado</button>
 
@@ -142,15 +134,13 @@ ligado=!ligado;
 if(ligado){
 toggleBtn.className="ligado";
 toggleBtn.textContent="Scanner Ligado";
-statusText.textContent="Mostre um círculo em papel branco";
 }else{
 toggleBtn.className="desligado";
 toggleBtn.textContent="Scanner Desligado";
-statusText.textContent="Scanner pausado";
 }
 };
 
-// som
+// som estilo scanner de mercado
 function beep(){
 if(!audioCtx){
 audioCtx=new(window.AudioContext||window.webkitAudioContext)();
@@ -159,7 +149,8 @@ audioCtx=new(window.AudioContext||window.webkitAudioContext)();
 const osc=audioCtx.createOscillator();
 const gain=audioCtx.createGain();
 
-osc.frequency.value=1050;
+osc.type="square";
+osc.frequency.value=1800;
 
 osc.connect(gain);
 gain.connect(audioCtx.destination);
@@ -167,14 +158,14 @@ gain.connect(audioCtx.destination);
 osc.start();
 tocando=true;
 
-statusText.textContent="Círculo válido detectado";
+statusText.textContent="Triângulo detectado";
 
-if(navigator.vibrate) navigator.vibrate(200);
+if(navigator.vibrate) navigator.vibrate(150);
 
 setTimeout(()=>{
 osc.stop();
 tocando=false;
-statusText.textContent="Mostre um círculo em papel branco";
+statusText.textContent="Mostre um triângulo em papel branco";
 },1500);
 }
 
@@ -185,9 +176,9 @@ video:{facingMode:"environment"}
 video.srcObject=stream;
 });
 
-// detecção especializada
+// detectar triângulo
 function detectar(){
-if(!ligado||tocando||!cv) return;
+if(!ligado||tocando||!cv||!video.videoWidth) return;
 
 canvas.width=video.videoWidth;
 canvas.height=video.videoHeight;
@@ -199,42 +190,51 @@ let gray=new cv.Mat();
 
 cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
 
-// verificar se fundo é claro (papel)
+// verificar fundo claro
 let media=cv.mean(gray)[0];
-
-if(media<180){
+if(media<170){
 src.delete();
 gray.delete();
 return;
 }
 
-cv.GaussianBlur(gray,gray,new cv.Size(9,9),2);
+let blur=new cv.Mat();
+cv.GaussianBlur(gray,blur,new cv.Size(5,5),0);
 
-let circles=new cv.Mat();
+let edges=new cv.Mat();
+cv.Canny(blur,edges,60,120);
 
-cv.HoughCircles(
-gray,
-circles,
-cv.HOUGH_GRADIENT,
-1,
-80,
-120,
-40,
-30,
-200
-);
+let contours=new cv.MatVector();
+let hierarchy=new cv.Mat();
 
-// somente 1 círculo
-if(circles.cols===1){
+cv.findContours(edges,contours,hierarchy,cv.RETR_EXTERNAL,cv.CHAIN_APPROX_SIMPLE);
+
+for(let i=0;i<contours.size();i++){
+let cnt=contours.get(i);
+let peri=cv.arcLength(cnt,true);
+let approx=new cv.Mat();
+
+cv.approxPolyDP(cnt,approx,0.04*peri,true);
+
+// TRIÂNGULO = 3 lados
+if(approx.rows===3){
 beep();
+approx.delete();
+break;
+}
+
+approx.delete();
 }
 
 src.delete();
 gray.delete();
-circles.delete();
+blur.delete();
+edges.delete();
+contours.delete();
+hierarchy.delete();
 }
 
-setInterval(detectar,250);
+setInterval(detectar,200);
 </script>
 
 </body>
