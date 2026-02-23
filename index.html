@@ -3,45 +3,48 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scanner de Círculos</title>
+<title>Scanner de Círculo</title>
 
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <style>
 body{
 margin:0;
-background:#0f172a;
-font-family:Arial;
+background:linear-gradient(180deg,#0f172a,#020617);
+font-family:system-ui;
 display:flex;
 flex-direction:column;
 align-items:center;
 color:white;
+min-height:100vh;
 }
 
 header{
 width:100%;
-padding:14px;
+padding:18px;
 text-align:center;
+font-size:18px;
+font-weight:600;
 background:#020617;
-font-weight:bold;
+border-bottom:1px solid rgba(255,255,255,0.05);
 }
 
 #scanner{
-margin-top:20px;
+margin-top:25px;
 width:92%;
-max-width:360px;
+max-width:380px;
 background:#020617;
-border-radius:18px;
-padding:15px;
-box-shadow:0 10px 30px rgba(0,0,0,0.6);
+border-radius:22px;
+padding:16px;
+box-shadow:0 20px 50px rgba(0,0,0,0.6);
 }
 
 #cameraBox{
 position:relative;
 height:260px;
-border-radius:14px;
+border-radius:16px;
 overflow:hidden;
-border:3px solid #22c55e;
+border:2px solid #22c55e;
 }
 
 video{
@@ -54,8 +57,8 @@ object-fit:cover;
 position:absolute;
 width:100%;
 height:3px;
-background:red;
-box-shadow:0 0 10px red;
+background:#ff2d2d;
+box-shadow:0 0 12px red;
 animation:scan 2s linear infinite;
 }
 
@@ -64,31 +67,45 @@ animation:scan 2s linear infinite;
 100%{top:100%}
 }
 
-button{
-width:100%;
-margin-top:15px;
-padding:14px;
-border:none;
-border-radius:12px;
-font-size:16px;
-font-weight:bold;
-cursor:pointer;
-}
-
-.ligado{background:#22c55e;}
-.desligado{background:#ef4444;}
-
 #status{
-margin-top:10px;
+margin-top:12px;
 text-align:center;
 font-size:14px;
+opacity:0.85;
+}
+
+button{
+width:100%;
+margin-top:16px;
+padding:14px;
+border:none;
+border-radius:14px;
+font-size:16px;
+font-weight:600;
+cursor:pointer;
+transition:0.2s;
+}
+
+.ligado{
+background:#22c55e;
+}
+
+.desligado{
+background:#ef4444;
+}
+
+footer{
+margin-top:auto;
+padding:18px;
+font-size:12px;
+opacity:0.6;
 }
 </style>
 </head>
 
 <body>
 
-<header>Scanner de Círculos</header>
+<header>Scanner Inteligente</header>
 
 <div id="scanner">
 
@@ -97,11 +114,13 @@ font-size:14px;
 <div id="laser"></div>
 </div>
 
-<div id="status">Procurando círculo...</div>
+<div id="status">Mostre um círculo em papel branco</div>
 
 <button id="toggleBtn" class="ligado">Scanner Ligado</button>
 
 </div>
+
+<footer>feito por Pedro Henrique para isabella</footer>
 
 <canvas id="canvas" style="display:none;"></canvas>
 
@@ -123,9 +142,11 @@ ligado=!ligado;
 if(ligado){
 toggleBtn.className="ligado";
 toggleBtn.textContent="Scanner Ligado";
+statusText.textContent="Mostre um círculo em papel branco";
 }else{
 toggleBtn.className="desligado";
 toggleBtn.textContent="Scanner Desligado";
+statusText.textContent="Scanner pausado";
 }
 };
 
@@ -138,21 +159,22 @@ audioCtx=new(window.AudioContext||window.webkitAudioContext)();
 const osc=audioCtx.createOscillator();
 const gain=audioCtx.createGain();
 
-osc.frequency.value=1100;
+osc.frequency.value=1050;
+
 osc.connect(gain);
 gain.connect(audioCtx.destination);
 
 osc.start();
 tocando=true;
 
-statusText.textContent="Círculo detectado";
+statusText.textContent="Círculo válido detectado";
 
 if(navigator.vibrate) navigator.vibrate(200);
 
 setTimeout(()=>{
 osc.stop();
 tocando=false;
-statusText.textContent="Procurando círculo...";
+statusText.textContent="Mostre um círculo em papel branco";
 },1500);
 }
 
@@ -163,8 +185,8 @@ video:{facingMode:"environment"}
 video.srcObject=stream;
 });
 
-// detecção de círculo
-function detectarCirculo(){
+// detecção especializada
+function detectar(){
 if(!ligado||tocando||!cv) return;
 
 canvas.width=video.videoWidth;
@@ -174,9 +196,19 @@ ctx.drawImage(video,0,0);
 
 let src=cv.imread(canvas);
 let gray=new cv.Mat();
+
 cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
 
-cv.GaussianBlur(gray,gray,new cv.Size(9,9),1.5);
+// verificar se fundo é claro (papel)
+let media=cv.mean(gray)[0];
+
+if(media<180){
+src.delete();
+gray.delete();
+return;
+}
+
+cv.GaussianBlur(gray,gray,new cv.Size(9,9),2);
 
 let circles=new cv.Mat();
 
@@ -185,14 +217,15 @@ gray,
 circles,
 cv.HOUGH_GRADIENT,
 1,
-50,
+80,
 120,
+40,
 30,
-20,
 200
 );
 
-if(circles.cols>0){
+// somente 1 círculo
+if(circles.cols===1){
 beep();
 }
 
@@ -201,7 +234,7 @@ gray.delete();
 circles.delete();
 }
 
-setInterval(detectarCirculo,300);
+setInterval(detectar,250);
 </script>
 
 </body>
