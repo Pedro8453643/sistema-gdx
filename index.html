@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Scanner de Mercado (Simulador)</title>
+
+<style>
+body {
+  background: #111;
+  color: white;
+  text-align: center;
+  font-family: Arial, sans-serif;
+}
+
+#cameraBox {
+  width: 260px;
+  height: 200px;
+  margin: 20px auto;
+  border: 4px solid #00ff9c;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+video, canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+#scanLine {
+  position: absolute;
+  width: 100%;
+  height: 3px;
+  background: red;
+  animation: scan 2s infinite;
+}
+
+@keyframes scan {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+#toggleBtn {
+  margin-top: 15px;
+  padding: 12px 25px;
+  font-size: 16px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: green;
+  color: white;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Scanner de Mercado (Simulação)</h2>
+
+<div id="cameraBox">
+  <video id="video" autoplay></video>
+  <div id="scanLine"></div>
+</div>
+
+<button id="toggleBtn">Scanner Ligado</button>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const toggleBtn = document.getElementById("toggleBtn");
+
+let scannerLigado = true;
+let tocandoSom = false;
+let audioCtx;
+
+// botão liga/desliga
+toggleBtn.onclick = () => {
+  scannerLigado = !scannerLigado;
+
+  if (scannerLigado) {
+    toggleBtn.style.background = "green";
+    toggleBtn.textContent = "Scanner Ligado";
+  } else {
+    toggleBtn.style.background = "red";
+    toggleBtn.textContent = "Scanner Desligado";
+  }
+};
+
+// som de piiii por 1.5 segundos
+function beepLong() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  const oscillator = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(1100, audioCtx.currentTime);
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  oscillator.start();
+  tocandoSom = true;
+
+  setTimeout(() => {
+    oscillator.stop();
+    tocandoSom = false;
+  }, 1500);
+}
+
+// abrir câmera
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: "environment" }
+}).then(stream => {
+  video.srcObject = stream;
+});
+
+// detectar barras tipo | | | |
+function detectarCodigo() {
+  if (!scannerLigado || tocandoSom) return;
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = frame.data;
+
+  let barrasSeguidas = 0;
+  let maxBarrasSeguidas = 0;
+
+  for (let x = 0; x < canvas.width; x += 8) {
+    let colunaEscura = 0;
+
+    for (let y = 0; y < canvas.height; y += 8) {
+      const i = (y * canvas.width + x) * 4;
+      const brilho = data[i] + data[i + 1] + data[i + 2];
+
+      if (brilho < 200) colunaEscura++;
+    }
+
+    if (colunaEscura > 8) {
+      barrasSeguidas++;
+      if (barrasSeguidas > maxBarrasSeguidas) {
+        maxBarrasSeguidas = barrasSeguidas;
+      }
+    } else {
+      barrasSeguidas = 0;
+    }
+  }
+
+  // precisa de pelo menos 4 barras seguidas
+  if (maxBarrasSeguidas >= 4) {
+    beepLong();
+  }
+}
+
+setInterval(detectarCodigo, 300);
+</script>
+
+</body>
+</html>
