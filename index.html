@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scanner</title>
+<title>Scanner de Círculos</title>
+
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <style>
 body{
@@ -86,7 +88,7 @@ font-size:14px;
 
 <body>
 
-<header>Scanner de Mercado</header>
+<header>Scanner de Círculos</header>
 
 <div id="scanner">
 
@@ -95,7 +97,7 @@ font-size:14px;
 <div id="laser"></div>
 </div>
 
-<div id="status">Procurando código...</div>
+<div id="status">Procurando círculo...</div>
 
 <button id="toggleBtn" class="ligado">Scanner Ligado</button>
 
@@ -110,15 +112,15 @@ const ctx=canvas.getContext("2d");
 const statusText=document.getElementById("status");
 const toggleBtn=document.getElementById("toggleBtn");
 
-let scannerLigado=true;
+let ligado=true;
 let tocando=false;
 let audioCtx;
 
 // botão
 toggleBtn.onclick=()=>{
-scannerLigado=!scannerLigado;
+ligado=!ligado;
 
-if(scannerLigado){
+if(ligado){
 toggleBtn.className="ligado";
 toggleBtn.textContent="Scanner Ligado";
 }else{
@@ -136,21 +138,21 @@ audioCtx=new(window.AudioContext||window.webkitAudioContext)();
 const osc=audioCtx.createOscillator();
 const gain=audioCtx.createGain();
 
-osc.frequency.value=1150;
+osc.frequency.value=1100;
 osc.connect(gain);
 gain.connect(audioCtx.destination);
 
 osc.start();
 tocando=true;
 
-statusText.textContent="Código detectado";
+statusText.textContent="Círculo detectado";
 
 if(navigator.vibrate) navigator.vibrate(200);
 
 setTimeout(()=>{
 osc.stop();
 tocando=false;
-statusText.textContent="Procurando código...";
+statusText.textContent="Procurando círculo...";
 },1500);
 }
 
@@ -161,59 +163,45 @@ video:{facingMode:"environment"}
 video.srcObject=stream;
 });
 
-// DETECÇÃO TREINADA DE BARRAS
-function detectar(){
-if(!scannerLigado||tocando) return;
+// detecção de círculo
+function detectarCirculo(){
+if(!ligado||tocando||!cv) return;
 
 canvas.width=video.videoWidth;
 canvas.height=video.videoHeight;
 
 ctx.drawImage(video,0,0);
 
-const w=canvas.width;
-const h=canvas.height;
+let src=cv.imread(canvas);
+let gray=new cv.Mat();
+cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
 
-// faixa central
-const y=Math.floor(h*0.5);
+cv.GaussianBlur(gray,gray,new cv.Size(9,9),1.5);
 
-let linha=[];
+let circles=new cv.Mat();
 
-// coleta brilho da linha
-for(let x=0;x<w;x+=2){
-const pixel=ctx.getImageData(x,y,1,1).data;
-const brilho=pixel[0]+pixel[1]+pixel[2];
-linha.push(brilho);
-}
+cv.HoughCircles(
+gray,
+circles,
+cv.HOUGH_GRADIENT,
+1,
+50,
+120,
+30,
+20,
+200
+);
 
-// suavização (tipo modelo treinado)
-let suavizado=[];
-for(let i=2;i<linha.length-2;i++){
-let media=(linha[i-2]+linha[i-1]+linha[i]+linha[i+1]+linha[i+2])/5;
-suavizado.push(media);
-}
-
-// detectar transições claro/escuro
-let transicoes=0;
-let sequencia=0;
-
-for(let i=1;i<suavizado.length;i++){
-let diff=Math.abs(suavizado[i]-suavizado[i-1]);
-
-if(diff>60){ // mudança forte = barra
-sequencia++;
-transicoes++;
-
-if(sequencia>=4){
+if(circles.cols>0){
 beep();
-return;
-}
-}else{
-if(sequencia>0) sequencia--;
-}
-}
 }
 
-setInterval(detectar,120);
+src.delete();
+gray.delete();
+circles.delete();
+}
+
+setInterval(detectarCirculo,300);
 </script>
 
 </body>
